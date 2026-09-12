@@ -1,1 +1,56 @@
+import streamlit as st
+from PIL import Image, ImageDraw
+from inference_sdk import InferenceHTTPClient
+import tempfile
+
+st.set_page_config(page_title="AI Crack Detector", page_icon="🧱", layout="centered")
+
+st.title("🧱 سیستەمێ ژیرانە یێ دەستنیشانکرنا درزان")
+st.write("وێنەیەکێ دیوار یان کۆنکریتی باربکە دا مۆدێلا RF-DETR شیکارکرنا درزان ل سەر بکەت.")
+
+# API Key یا خۆ دانە جهێ دیارکری
+API_KEY = "YOUR_ROBOFLOW_API_KEY"
+
+CLIENT = InferenceHTTPClient(
+    api_url="https://detect.roboflow.com",
+    api_key=API_KEY
+)
+
+MODEL_ID = "crack-segmentation-nfjfo-2-rfdetr-seg/2"
+
+source = st.radio("شێوازێ بارکرنا وێنەیی:", ("گالێری", "کامێرا"))
+
+image_file = None
+if source == "کامێرا":
+    image_file = st.camera_input("وێنەیەکێ ڕاستەوخۆ بگرە")
+else:
+    image_file = st.file_uploader("وێنەیەکێ هەڵبژێرە...", type=["jpg", "jpeg", "png"])
+
+if image_file is not None:
+    img = Image.open(image_file).convert("RGB")
+    st.image(img, caption="وێنەیێ بەریا پشکنینێ", use_container_width=True)
+    
+    if st.button("🔍 پشکنین بکە (Analyze)", type="primary"):
+        with st.spinner("د شیکارکرنێ دا یە ب مۆدێلا RF-DETR..."):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+                img.save(tmp.name)
+                # پەیوەندیدان ب API
+                result = CLIENT.infer(tmp.name, model_id=MODEL_ID)
+            
+            st.success("پشکنین ب سەرکەفتن تەواو بوو!")
+            
+            # نیشاندانا دەرئەنجامی
+            predictions = result.get("predictions", [])
+            st.metric(label="ژمارا درزێن هاتینە دەستنیشانکرن", value=len(predictions))
+            
+            # Draw polygons if available
+            draw_img = img.copy()
+            draw = ImageDraw.Draw(draw_img)
+            
+            for pred in predictions:
+                if "points" in pred:
+                    pts = [(p["x"], p["y"]) for p in pred["points"]]
+                    draw.polygon(pts, outline="yellow", width=4)
+            
+            st.image(draw_img, caption="دەرئەنجامێ نیشاندانا درزان (Crack Detection)", use_container_width=True)
 
